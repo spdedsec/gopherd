@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: gopherd
+      POSTGRES_USER: gopherd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-in-production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gopherd -d gopherd"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LISTEN_ADDR: :8080
+      DATABASE_URL: postgres://gopherd:${POSTGRES_PASSWORD:-change-me-in-production}@db:5432/gopherd?sslmode=disable
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
+      DB_MIN_CONNS: ${DB_MIN_CONNS:-2}
+      SESSION_TTL: ${SESSION_TTL:-168h}
+      MAX_BODY_BYTES: ${MAX_BODY_BYTES:-1048576}
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-10}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-20}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
