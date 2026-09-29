@@ -1,0 +1,179 @@
+openapi: 3.0.3
+info:
+  title: gopherd API
+  version: 1.0.0
+  description: Production-oriented task API implemented in Go.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health/live:
+    get:
+      summary: Liveness check
+      responses:
+        '200':
+          description: Process is alive
+  /health/ready:
+    get:
+      summary: Readiness check
+      responses:
+        '200':
+          description: Database is reachable
+        '503':
+          description: Dependency unavailable
+  /metrics:
+    get:
+      summary: Prometheus-compatible metrics
+      responses:
+        '200':
+          description: Metrics
+  /api/v1/auth/register:
+    post:
+      summary: Register a user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '201':
+          description: User created and session issued
+        '400':
+          description: Invalid input
+        '409':
+          description: Email already registered
+  /api/v1/auth/login:
+    post:
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Credentials'
+      responses:
+        '200':
+          description: Session issued
+        '401':
+          description: Invalid credentials
+  /api/v1/auth/logout:
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Revoke current session
+      responses:
+        '204':
+          description: Session revoked
+        '401':
+          description: Unauthorized
+  /api/v1/me:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Current user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized
+  /api/v1/tasks:
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: List tasks
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+        - in: query
+          name: completed
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Task list
+    post:
+      security: [{ bearerAuth: [] }]
+      summary: Create a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        '201':
+          description: Created task
+        '400':
+          description: Invalid input
+  /api/v1/tasks/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      security: [{ bearerAuth: [] }]
+      summary: Get a task
+      responses:
+        '200': { description: Task }
+        '401': { description: Unauthorized }
+        '404': { description: Not found }
+    put:
+      security: [{ bearerAuth: [] }]
+      summary: Replace a task
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskInput'
+      responses:
+        '200': { description: Updated task }
+        '400': { description: Invalid input }
+        '404': { description: Not found }
+    delete:
+      security: [{ bearerAuth: [] }]
+      summary: Delete a task
+      responses:
+        '204': { description: Deleted }
+        '404': { description: Not found }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session-token
+  schemas:
+    Credentials:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 10 }
+    User:
+      type: object
+      required: [id, email, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        created_at: { type: string, format: date-time }
+    TaskInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, maxLength: 200 }
+        description: { type: string, maxLength: 5000 }
+        completed: { type: boolean }
+    Task:
+      allOf:
+        - $ref: '#/components/schemas/TaskInput'
+        - type: object
+          required: [id, created_at, updated_at]
+          properties:
+            id: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
